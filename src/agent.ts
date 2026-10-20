@@ -7,6 +7,7 @@ import { companies } from "./data.ts";
 import { executeToolCalls, toolSchemas } from "./tools.ts";
 
 const MODEL = process.env.ROGO_MODEL ?? "claude-sonnet-5";
+const EFFORT = (process.env.ROGO_EFFORT ?? "medium") as Anthropic.OutputConfig["effort"];
 const MAX_ITERATIONS = 12;
 
 const client = new Anthropic();
@@ -58,6 +59,7 @@ export async function runAgent(
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 16000,
+      output_config: { effort: EFFORT },
       system: SYSTEM_PROMPT,
       tools: toolSchemas,
       messages,
