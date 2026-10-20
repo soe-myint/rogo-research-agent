@@ -30,8 +30,8 @@ describe("readEvents", () => {
   });
 
   it("handles a final line with no trailing newline", async () => {
-    const events = await collect(streamOf(['{"type":"editing"}\n{"type":"answer","answer":"x"}']));
-    expect(events.map((e) => e.type)).toEqual(["editing", "answer"]);
+    const events = await collect(streamOf(['{"type":"iteration","n":2}\n{"type":"answer","answer":"x"}']));
+    expect(events.map((e) => e.type)).toEqual(["iteration", "answer"]);
   });
 });
 
@@ -64,6 +64,5 @@ describe("applyEvent", () => {
   it("moves through the phases of a run", () => {
     expect(run([{ type: "iteration", n: 1 }]).phase).toBe("Planning the research");
     expect(run([{ type: "iteration", n: 2 }]).phase).toBe("Reviewing what it found");
-    expect(run([{ type: "editing" }]).phase).toBe("Writing up the answer");
   });
 });

@@ -70,8 +70,6 @@ export function applyEvent(progress: Progress, event: ChatEvent): Progress {
         ms: event.ms,
       });
     }
-    case "editing":
-      return { ...progress, phase: "Writing up the answer" };
     default:
       return progress;
   }

@@ -38,9 +38,6 @@ app.post("/api/chat", async (req, res) => {
         case "tool_failed":
           console.log(`[tool]  ! ${event.name}: ${event.message}`);
           break;
-        case "editing":
-          console.log(`[agent] editing draft`);
-          break;
       }
       send(event);
     });
