@@ -25,7 +25,8 @@ function fakeClient(turns: Anthropic.ContentBlock[][]) {
           async finalMessage() {
             for (const block of content) if (block.type === "text") onText(block.text);
             const stop_reason = content.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn";
-            return { content, stop_reason } as Anthropic.Message;
+            const usage = { input_tokens: 100, output_tokens: 10 };
+            return { content, stop_reason, usage } as Anthropic.Message;
           },
         };
       },
@@ -48,7 +49,9 @@ describe("runAgent", () => {
     const pending = runAgent("Compare them", () => {}, client);
     await vi.advanceTimersByTimeAsync(800);
 
-    expect((await pending).answer).toBe("Acme Corp is growing faster.");
+    const result = await pending;
+    expect(result.answer).toBe("Acme Corp is growing faster.");
+    expect(result.usage).toEqual({ inputTokens: 200, outputTokens: 20 });
     const results = requests[1].messages.at(-1)!;
     expect(results.role).toBe("user");
     expect((results.content as Anthropic.ToolResultBlockParam[]).map((r) => r.tool_use_id)).toEqual(["a", "b"]);

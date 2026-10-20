@@ -25,6 +25,11 @@
   concurrent tools, `medium` effort, streamed text); I checked each one fails when its change is undone.
 - **Tool bugs vs expected failures.** Only `ToolError` messages (e.g. an unknown company) reach the model. Any other
   exception is a bug: it's logged with its stack trace and the model gets a generic error.
+- **Structured logs for tracking errors.** Each log line is one JSON object tagged with a request ID, so one
+  question's lines can be pulled together, and each request ends with a summary line (time, model calls, tokens).
+  Errors keep their stack trace and are also appended to `logs/errors.jsonl` for review; error messages shown to
+  users include the request ID. In production, the JSON output would go to Datadog and errors to Sentry instead;
+  `src/log.ts` is the one place to wire them in.
 
 ## Decisions
 

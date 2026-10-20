@@ -47,6 +47,7 @@ describe("executeToolCalls", () => {
   });
 
   it("logs a bug with its stack and gives the model a generic message", async () => {
+    vi.stubEnv("ROGO_ERROR_LOG", "");
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     // A null input makes executeTool throw a TypeError: a stand-in for any bug in a tool.
     const pending = executeToolCalls([call("a", "searchCompanies", null as never)], () => {});
@@ -60,7 +61,13 @@ describe("executeToolCalls", () => {
         is_error: true,
       },
     ]);
-    expect(logged).toHaveBeenCalledWith(expect.stringContaining("searchCompanies crashed"), expect.any(TypeError));
+    expect(JSON.parse(logged.mock.calls[0][0])).toMatchObject({
+      level: "error",
+      event: "tool_crashed",
+      tool: "searchCompanies",
+      error: { name: "TypeError" },
+    });
     logged.mockRestore();
+    vi.unstubAllEnvs();
   });
 });

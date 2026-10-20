@@ -6,6 +6,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { AgentEvent } from "./agent.ts";
 import { companies, documents, financials } from "./data.ts";
+import { log } from "./log.ts";
 
 /** Thrown when a tool cannot service a request. */
 export class ToolError extends Error {}
@@ -166,7 +167,7 @@ export function executeToolCalls(
         // else is a bug: log it with its stack, and don't pass internals to the model.
         const expected = err instanceof ToolError;
         const message = expected ? err.message : `${use.name} failed with an internal error`;
-        if (!expected) console.error(`[tool]  ✗ ${use.name} crashed on ${JSON.stringify(use.input)}`, err);
+        if (!expected) log.error("tool_crashed", { tool: use.name, input: use.input, error: err });
         onEvent({ type: "tool_failed", id: use.id, name: use.name, message });
         return { type: "tool_result", tool_use_id: use.id, content: message, is_error: true };
       } finally {

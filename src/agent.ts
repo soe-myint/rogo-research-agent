@@ -45,6 +45,7 @@ export type AgentEvent =
 export interface AgentResult {
   answer: string;
   iterations: number;
+  usage: { inputTokens: number; outputTokens: number };
 }
 
 function textOf(message: Anthropic.Message): string {
@@ -63,6 +64,7 @@ export async function runAgent(
 
   let answer = "";
   let iterations = 0;
+  const usage = { inputTokens: 0, outputTokens: 0 };
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
@@ -79,6 +81,8 @@ export async function runAgent(
     // Forward text as it's generated, so the UI can show the answer while it's written.
     stream.on("text", (delta) => onEvent({ type: "text", delta }));
     const response = await stream.finalMessage();
+    usage.inputTokens += response.usage.input_tokens;
+    usage.outputTokens += response.usage.output_tokens;
 
     messages.push({ role: "assistant", content: response.content });
 
@@ -100,5 +104,5 @@ export async function runAgent(
       "I looked at a number of sources but ran out of research steps before I could pull the answer together. Try asking a narrower question.";
   }
 
-  return { answer, iterations };
+  return { answer, iterations, usage };
 }
