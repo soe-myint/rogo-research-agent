@@ -23,6 +23,8 @@
 - **Agent loop tests.** `runAgent` takes its client as a parameter, so the loop is tested against a scripted fake:
   tool results go back in order, and it stops after 12 calls. Four tests lock in the speed-ups (one call per turn,
   concurrent tools, `medium` effort, streamed text); I checked each one fails when its change is undone.
+- **Tool bugs vs expected failures.** Only `ToolError` messages (e.g. an unknown company) reach the model. Any other
+  exception is a bug: it's logged with its stack trace and the model gets a generic error.
 
 ## Decisions
 
@@ -39,7 +41,6 @@
   -      system: SYSTEM_PROMPT,
   +      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
   ```
-- Real bugs in tools reach the model looking like an expected "not found".
 - No tests for the HTTP endpoint or UI rendering, and real latency is only measured by hand.
 - No stop-reason checks, raw API errors shown to users, no input validation.
 - Bulky tool results; no cancellation or timeout.

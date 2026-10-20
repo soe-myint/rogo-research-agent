@@ -45,4 +45,22 @@ describe("executeToolCalls", () => {
     ]);
     expect(events).toEqual(["tool_start", "tool_failed", "tool_end"]);
   });
+
+  it("logs a bug with its stack and gives the model a generic message", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    // A null input makes executeTool throw a TypeError: a stand-in for any bug in a tool.
+    const pending = executeToolCalls([call("a", "searchCompanies", null as never)], () => {});
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(await pending).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: "a",
+        content: "searchCompanies failed with an internal error",
+        is_error: true,
+      },
+    ]);
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("searchCompanies crashed"), expect.any(TypeError));
+    logged.mockRestore();
+  });
 });
