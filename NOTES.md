@@ -15,8 +15,11 @@
 - **Thinking effort `medium`.** At the default `high`, most of the answer call was hidden thinking. Across the five
   README questions, `medium` cut total time 68.7s → 56.7s with no factual errors found (vs 4 at `high`). Results
   and all answers: `docs/effort-comparison.md`. Override with `ROGO_EFFORT`.
-- **Performance overall:** "Which company is growing fastest?" went from 27.0s to 8.2s across these three changes
-  (editor removal, parallel tools, `medium` effort).
+- **Streamed answers.** Each model turn now streams, and the UI shows the answer while it's being written. Text from
+  a turn that ends in tool calls is a preamble ("I'll pull…"), so it's cleared when the next turn starts. Across the
+  five README questions, first words appear at 3.4–6.3s instead of when the answer finishes (8.9–12.5s).
+- **Performance overall:** "Which company is growing fastest?" went from 27.0s to 8.2s (editor removal, parallel
+  tools, `medium` effort), and its first words now appear at ~4s.
 
 ## Decisions
 
@@ -36,7 +39,7 @@
 - Real bugs in tools reach the model looking like an expected "not found".
 - The API client is created at import, so the agent loop can't be unit-tested.
 - No stop-reason checks, raw API errors shown to users, no input validation.
-- Final answer not streamed; bulky tool results; no cancellation or timeout.
+- Bulky tool results; no cancellation or timeout.
 - Company names must match exactly ("Acme", "GLBX" fail).
 
 ## Process

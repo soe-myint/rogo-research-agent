@@ -27,6 +27,7 @@ ${companies
 
 export type AgentEvent =
   | { type: "iteration"; n: number }
+  | { type: "text"; delta: string }
   | { type: "tool_start"; id: string; name: string; input: unknown }
   | { type: "tool_end"; id: string; name: string; ms: number }
   | { type: "tool_failed"; id: string; name: string; message: string };
@@ -56,7 +57,7 @@ export async function runAgent(
     iterations++;
     onEvent({ type: "iteration", n: iterations });
 
-    const response = await client.messages.create({
+    const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 16000,
       output_config: { effort: EFFORT },
@@ -64,6 +65,9 @@ export async function runAgent(
       tools: toolSchemas,
       messages,
     });
+    // Forward text as it's generated, so the UI can show the answer while it's written.
+    stream.on("text", (delta) => onEvent({ type: "text", delta }));
+    const response = await stream.finalMessage();
 
     messages.push({ role: "assistant", content: response.content });
 

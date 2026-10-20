@@ -61,6 +61,16 @@ describe("applyEvent", () => {
     expect(progress.steps[0]).toMatchObject({ status: "failed", error: "no financials found" });
   });
 
+  it("accumulates streamed text and drops it when a new turn starts", () => {
+    const preamble = run([
+      { type: "iteration", n: 1 },
+      { type: "text", delta: "I'll pull " },
+      { type: "text", delta: "the financials." },
+    ]);
+    expect(preamble.draft).toBe("I'll pull the financials.");
+    expect(applyEvent(preamble, { type: "iteration", n: 2 }).draft).toBe("");
+  });
+
   it("moves through the phases of a run", () => {
     expect(run([{ type: "iteration", n: 1 }]).phase).toBe("Planning the research");
     expect(run([{ type: "iteration", n: 2 }]).phase).toBe("Reviewing what it found");

@@ -115,37 +115,42 @@ function PendingBubble({ progress }: { progress: Progress }) {
   // Keep the newest step in view as the list grows.
   useEffect(() => {
     ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [progress.steps.length, progress.phase]);
+  }, [progress.steps.length, progress.phase, progress.draft]);
 
   return (
-    <div ref={ref} className="bubble assistant pending" role="status">
-      <div className="phase">
-        <span className="spinner" aria-hidden="true" />
-        <span>{progress.phase}…</span>
-        <span className="elapsed" aria-hidden="true">
-          {elapsed}s
-        </span>
+    <div ref={ref} className="bubble assistant pending">
+      <div role="status">
+        <div className="phase">
+          <span className="spinner" aria-hidden="true" />
+          <span>{progress.phase}…</span>
+          <span className="elapsed" aria-hidden="true">
+            {elapsed}s
+          </span>
+        </div>
+
+        {progress.steps.length > 0 && (
+          <ol className="steps">
+            {progress.steps.map((step) => (
+              <li key={step.id} className={step.status} title={step.error}>
+                {step.status === "running" ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : (
+                  <span className="icon" aria-hidden="true">
+                    {step.status === "done" ? "✓" : "✕"}
+                  </span>
+                )}
+                <span className="label">{step.label}</span>
+                {step.ms !== undefined && (
+                  <span className="ms">{(step.ms / 1000).toFixed(1)}s</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
 
-      {progress.steps.length > 0 && (
-        <ol className="steps">
-          {progress.steps.map((step) => (
-            <li key={step.id} className={step.status} title={step.error}>
-              {step.status === "running" ? (
-                <span className="spinner" aria-hidden="true" />
-              ) : (
-                <span className="icon" aria-hidden="true">
-                  {step.status === "done" ? "✓" : "✕"}
-                </span>
-              )}
-              <span className="label">{step.label}</span>
-              {step.ms !== undefined && (
-                <span className="ms">{(step.ms / 1000).toFixed(1)}s</span>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
+      {/* Outside the status region, so screen readers don't announce every streamed word. */}
+      {progress.draft && <div className="draft">{progress.draft}</div>}
     </div>
   );
 }

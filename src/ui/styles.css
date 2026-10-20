@@ -161,6 +161,13 @@ header p {
   font-variant-numeric: tabular-nums;
 }
 
+.pending .draft {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eef1f4;
+  white-space: pre-wrap;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
