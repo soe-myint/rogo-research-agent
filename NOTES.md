@@ -20,6 +20,9 @@
   five README questions, first words appear at 3.4–6.3s instead of when the answer finishes (8.9–12.5s).
 - **Performance overall:** "Which company is growing fastest?" went from 27.0s to 8.2s (editor removal, parallel
   tools, `medium` effort), and its first words now appear at ~4s.
+- **Agent loop tests.** `runAgent` takes its client as a parameter, so the loop is tested against a scripted fake:
+  tool results go back in order, and it stops after 12 calls. Four tests lock in the speed-ups (one call per turn,
+  concurrent tools, `medium` effort, streamed text); I checked each one fails when its change is undone.
 
 ## Decisions
 
@@ -37,7 +40,7 @@
   +      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
   ```
 - Real bugs in tools reach the model looking like an expected "not found".
-- The API client is created at import, so the agent loop can't be unit-tested.
+- No tests for the HTTP endpoint or UI rendering, and real latency is only measured by hand.
 - No stop-reason checks, raw API errors shown to users, no input validation.
 - Bulky tool results; no cancellation or timeout.
 - Company names must match exactly ("Acme", "GLBX" fail).

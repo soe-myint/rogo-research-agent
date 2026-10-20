@@ -10,7 +10,17 @@ const MODEL = process.env.ROGO_MODEL ?? "claude-sonnet-5";
 const EFFORT = (process.env.ROGO_EFFORT ?? "medium") as Anthropic.OutputConfig["effort"];
 const MAX_ITERATIONS = 12;
 
-const client = new Anthropic();
+/** The part of the SDK client the agent uses, so tests can pass a fake. */
+export interface ModelClient {
+  messages: {
+    stream(params: Anthropic.MessageStreamParams): {
+      on(event: "text", listener: (delta: string) => void): unknown;
+      finalMessage(): Promise<Anthropic.Message>;
+    };
+  };
+}
+
+const defaultClient: ModelClient = new Anthropic();
 
 const SYSTEM_PROMPT = `You are Rogo Research, an assistant that answers questions about companies for financial analysts.
 
@@ -47,6 +57,7 @@ function textOf(message: Anthropic.Message): string {
 export async function runAgent(
   question: string,
   onEvent: (event: AgentEvent) => void,
+  client: ModelClient = defaultClient,
 ): Promise<AgentResult> {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: question }];
 
