@@ -28,9 +28,10 @@ const EDITOR_PROMPT = `You are an editor. Rewrite the analyst's draft answer so 
 
 export type AgentEvent =
   | { type: "iteration"; n: number }
-  | { type: "tool_start"; name: string; input: unknown }
-  | { type: "tool_end"; name: string; ms: number }
-  | { type: "tool_failed"; name: string; message: string };
+  | { type: "tool_start"; id: string; name: string; input: unknown }
+  | { type: "tool_end"; id: string; name: string; ms: number }
+  | { type: "tool_failed"; id: string; name: string; message: string }
+  | { type: "editing" };
 
 export interface AgentResult {
   answer: string;
@@ -80,7 +81,7 @@ export async function runAgent(
 
     for (const use of toolUses) {
       const startedAt = Date.now();
-      onEvent({ type: "tool_start", name: use.name, input: use.input });
+      onEvent({ type: "tool_start", id: use.id, name: use.name, input: use.input });
 
       let content: string;
       try {
@@ -89,10 +90,10 @@ export async function runAgent(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         content = `${use.name} returned: ${message}`;
-        onEvent({ type: "tool_failed", name: use.name, message });
+        onEvent({ type: "tool_failed", id: use.id, name: use.name, message });
       }
 
-      onEvent({ type: "tool_end", name: use.name, ms: Date.now() - startedAt });
+      onEvent({ type: "tool_end", id: use.id, name: use.name, ms: Date.now() - startedAt });
       toolResults.push({ type: "tool_result", tool_use_id: use.id, content });
     }
 
@@ -105,6 +106,7 @@ export async function runAgent(
   }
 
   // Polish the draft before showing it to the analyst.
+  onEvent({ type: "editing" });
   const edited = await client.messages.create({
     model: MODEL,
     max_tokens: 16000,

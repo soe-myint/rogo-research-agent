@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { runAgent } from "./agent.ts";
+import type { ChatEvent } from "./protocol.ts";
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error(
@@ -15,6 +16,12 @@ app.use(express.json());
 app.post("/api/chat", async (req, res) => {
   const message = String(req.body.message ?? "");
   console.log(`\n[chat] ${message}`);
+
+  // Stream progress so the UI can show what the agent is doing while it works.
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.setHeader("Cache-Control", "no-cache");
+  res.flushHeaders();
+  const send = (event: ChatEvent) => res.write(`${JSON.stringify(event)}\n`);
 
   try {
     const result = await runAgent(message, (event) => {
@@ -31,14 +38,19 @@ app.post("/api/chat", async (req, res) => {
         case "tool_failed":
           console.log(`[tool]  ! ${event.name}: ${event.message}`);
           break;
+        case "editing":
+          console.log(`[agent] editing draft`);
+          break;
       }
+      send(event);
     });
 
-    res.json({ answer: result.answer });
+    send({ type: "answer", answer: result.answer });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: String(err) });
+    send({ type: "error", message: String(err) });
   }
+  res.end();
 });
 
 const port = Number(process.env.PORT ?? 8787);
