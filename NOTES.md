@@ -15,6 +15,8 @@
 - **Thinking effort `medium`.** At the default `high`, most of the answer call was hidden thinking. Across the five
   README questions, `medium` cut total time 68.7s → 56.7s with no factual errors found (vs 4 at `high`). Results
   and all answers: `docs/effort-comparison.md`. Override with `ROGO_EFFORT`.
+- **Performance overall:** "Which company is growing fastest?" went from 27.0s to 8.2s across these three changes
+  (editor removal, parallel tools, `medium` effort).
 
 ## Decisions
 
