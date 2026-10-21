@@ -52,9 +52,11 @@
 - No tests for the HTTP endpoint or UI rendering, and real latency is only measured by hand. Each needs a medium
   amount of change (splitting the server's app setup from `listen()`, a browser-like test environment, a benchmark
   script against the live API), and I didn't have time for them. With more time, they're important to add.
-- No stop-reason checks, raw API errors shown to users, no input validation.
-- Bulky tool results.
-- Company names must match exactly ("Acme", "GLBX" fail).
+- Bulky tool results. A quick measurement showed the unused metadata is only ~5.5% of each financials result; most
+  of it is quarterly data that answers use, so I didn't change it.
+- I ran out of time before looking into these:
+  - No stop-reason checks, raw API errors shown to users, no input validation.
+  - Company names must match exactly ("Acme", "GLBX" fail).
 
 ## Process
 
