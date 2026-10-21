@@ -4,16 +4,33 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { companies } from "./data.ts";
-import { executeTool, toolSchemas } from "./tools.ts";
+import { executeToolCalls, toolSchemas } from "./tools.ts";
 
 const MODEL = process.env.ROGO_MODEL ?? "claude-sonnet-5";
+const EFFORT = (process.env.ROGO_EFFORT ?? "medium") as Anthropic.OutputConfig["effort"];
 const MAX_ITERATIONS = 12;
 
-const client = new Anthropic();
+/** The part of the SDK client the agent uses, so tests can pass a fake. */
+export interface ModelClient {
+  messages: {
+    stream(params: Anthropic.MessageStreamParams, options?: { signal?: AbortSignal }): {
+      on(event: "text", listener: (delta: string) => void): unknown;
+      finalMessage(): Promise<Anthropic.Message>;
+    };
+  };
+}
+
+const defaultClient: ModelClient = new Anthropic();
+
+export interface RunOptions {
+  client?: ModelClient;
+  /** Stops the run, e.g. when the user disconnects or a deadline passes. */
+  signal?: AbortSignal;
+}
 
 const SYSTEM_PROMPT = `You are Rogo Research, an assistant that answers questions about companies for financial analysts.
 
-Use the tools to look up companies, profiles, financials and source documents. Answer the analyst's question.
+Use the tools to look up companies, profiles, financials and source documents. Answer the analyst's question: lead with the direct answer, then the figures that support it. Keep it brief and easy to follow.
 
 Our coverage universe:
 ${companies
@@ -24,17 +41,17 @@ ${companies
   .join("\n")}
 `;
 
-const EDITOR_PROMPT = `You are an editor. Rewrite the analyst's draft answer so that it reads clearly and is easy to follow. Keep it brief and conversational. Return only the rewritten answer.`;
-
 export type AgentEvent =
   | { type: "iteration"; n: number }
-  | { type: "tool_start"; name: string; input: unknown }
-  | { type: "tool_end"; name: string; ms: number }
-  | { type: "tool_failed"; name: string; message: string };
+  | { type: "text"; delta: string }
+  | { type: "tool_start"; id: string; name: string; input: unknown }
+  | { type: "tool_end"; id: string; name: string; ms: number }
+  | { type: "tool_failed"; id: string; name: string; message: string };
 
 export interface AgentResult {
   answer: string;
   iterations: number;
+  usage: { inputTokens: number; outputTokens: number };
 }
 
 function textOf(message: Anthropic.Message): string {
@@ -47,23 +64,32 @@ function textOf(message: Anthropic.Message): string {
 export async function runAgent(
   question: string,
   onEvent: (event: AgentEvent) => void,
+  { client = defaultClient, signal }: RunOptions = {},
 ): Promise<AgentResult> {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: question }];
 
-  let draft = "";
+  let answer = "";
   let iterations = 0;
+  const usage = { inputTokens: 0, outputTokens: 0 };
 
   while (iterations < MAX_ITERATIONS) {
+    signal?.throwIfAborted();
     iterations++;
     onEvent({ type: "iteration", n: iterations });
 
-    const response = await client.messages.create({
+    const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 16000,
+      output_config: { effort: EFFORT },
       system: SYSTEM_PROMPT,
       tools: toolSchemas,
       messages,
-    });
+    }, { signal });
+    // Forward text as it's generated, so the UI can show the answer while it's written.
+    stream.on("text", (delta) => onEvent({ type: "text", delta }));
+    const response = await stream.finalMessage();
+    usage.inputTokens += response.usage.input_tokens;
+    usage.outputTokens += response.usage.output_tokens;
 
     messages.push({ role: "assistant", content: response.content });
 
@@ -72,50 +98,18 @@ export async function runAgent(
     );
 
     if (toolUses.length === 0) {
-      draft = textOf(response);
+      answer = textOf(response);
       break;
     }
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-    for (const use of toolUses) {
-      const startedAt = Date.now();
-      onEvent({ type: "tool_start", name: use.name, input: use.input });
-
-      let content: string;
-      try {
-        const output = await executeTool(use.name, use.input as Record<string, unknown>);
-        content = JSON.stringify(output);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        content = `${use.name} returned: ${message}`;
-        onEvent({ type: "tool_failed", name: use.name, message });
-      }
-
-      onEvent({ type: "tool_end", name: use.name, ms: Date.now() - startedAt });
-      toolResults.push({ type: "tool_result", tool_use_id: use.id, content });
-    }
-
+    const toolResults = await executeToolCalls(toolUses, onEvent);
     messages.push({ role: "user", content: toolResults });
   }
 
-  if (!draft) {
-    draft =
+  if (!answer) {
+    answer =
       "I looked at a number of sources but ran out of research steps before I could pull the answer together. Try asking a narrower question.";
   }
 
-  // Polish the draft before showing it to the analyst.
-  const edited = await client.messages.create({
-    model: MODEL,
-    max_tokens: 16000,
-    system: EDITOR_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Research transcript:\n${JSON.stringify(messages)}\n\nDraft answer:\n${draft}\n\nRewrite the draft answer.`,
-      },
-    ],
-  });
-
-  return { answer: textOf(edited), iterations };
+  return { answer, iterations, usage };
 }

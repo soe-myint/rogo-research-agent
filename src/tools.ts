@@ -4,7 +4,9 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
+import type { AgentEvent } from "./agent.ts";
 import { companies, documents, financials } from "./data.ts";
+import { log } from "./log.ts";
 
 /** Thrown when a tool cannot service a request. */
 export class ToolError extends Error {}
@@ -142,4 +144,35 @@ export async function executeTool(
     default:
       throw new ToolError(`unknown tool "${name}"`);
   }
+}
+
+/**
+ * Runs the tool calls from one model turn concurrently. Results keep the order of
+ * the calls, and failures are flagged with `is_error` so the model can tell them
+ * apart from data.
+ */
+export function executeToolCalls(
+  toolUses: Anthropic.ToolUseBlock[],
+  onEvent: (event: AgentEvent) => void,
+): Promise<Anthropic.ToolResultBlockParam[]> {
+  return Promise.all(
+    toolUses.map(async (use): Promise<Anthropic.ToolResultBlockParam> => {
+      const startedAt = Date.now();
+      onEvent({ type: "tool_start", id: use.id, name: use.name, input: use.input });
+      try {
+        const output = await executeTool(use.name, use.input as Record<string, unknown>);
+        return { type: "tool_result", tool_use_id: use.id, content: JSON.stringify(output) };
+      } catch (err) {
+        // A ToolError (e.g. an unknown company) tells the model what to try instead. Anything
+        // else is a bug: log it with its stack, and don't pass internals to the model.
+        const expected = err instanceof ToolError;
+        const message = expected ? err.message : `${use.name} failed with an internal error`;
+        if (!expected) log.error("tool_crashed", { tool: use.name, input: use.input, error: err });
+        onEvent({ type: "tool_failed", id: use.id, name: use.name, message });
+        return { type: "tool_result", tool_use_id: use.id, content: message, is_error: true };
+      } finally {
+        onEvent({ type: "tool_end", id: use.id, name: use.name, ms: Date.now() - startedAt });
+      }
+    }),
+  );
 }
