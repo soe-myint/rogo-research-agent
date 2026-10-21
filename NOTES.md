@@ -1,5 +1,20 @@
 # Notes
 
+## Approach
+
+1. **Started from the user's experience.** On my first run, a question took ~25s behind a static "Thinking…"
+   message, so the app looked hung. I started with live progress, so users can see what the agent is doing while it
+   works.
+2. **Then made it faster.** I profiled where the time went and fixed the biggest costs first: I removed a redundant
+   editor call, ran tool calls in parallel, lowered thinking effort after checking answer quality on the README
+   questions, and streamed the answer. "Which company is growing fastest?" went from 27s to ~8s, with the first
+   words at ~4s.
+3. **Then protected those changes.** I made the agent loop testable and added tests for each change, including tests
+   that fail if any speed-up is undone, so a future change can't quietly undo the performance gains. I also added
+   structured logs with request IDs and an error file, so problems can be tracked down and fixed.
+4. **With the time left,** I added cancellation and a time limit, so abandoned or stuck requests stop instead of
+   running, and billing, in the background.
+
 ## Changes
 
 - **Live progress while the agent works.** The agent already emitted progress events, but they only went to the
