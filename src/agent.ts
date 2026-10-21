@@ -13,7 +13,7 @@ const MAX_ITERATIONS = 12;
 /** The part of the SDK client the agent uses, so tests can pass a fake. */
 export interface ModelClient {
   messages: {
-    stream(params: Anthropic.MessageStreamParams): {
+    stream(params: Anthropic.MessageStreamParams, options?: { signal?: AbortSignal }): {
       on(event: "text", listener: (delta: string) => void): unknown;
       finalMessage(): Promise<Anthropic.Message>;
     };
@@ -21,6 +21,12 @@ export interface ModelClient {
 }
 
 const defaultClient: ModelClient = new Anthropic();
+
+export interface RunOptions {
+  client?: ModelClient;
+  /** Stops the run, e.g. when the user disconnects or a deadline passes. */
+  signal?: AbortSignal;
+}
 
 const SYSTEM_PROMPT = `You are Rogo Research, an assistant that answers questions about companies for financial analysts.
 
@@ -58,7 +64,7 @@ function textOf(message: Anthropic.Message): string {
 export async function runAgent(
   question: string,
   onEvent: (event: AgentEvent) => void,
-  client: ModelClient = defaultClient,
+  { client = defaultClient, signal }: RunOptions = {},
 ): Promise<AgentResult> {
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: question }];
 
@@ -67,6 +73,7 @@ export async function runAgent(
   const usage = { inputTokens: 0, outputTokens: 0 };
 
   while (iterations < MAX_ITERATIONS) {
+    signal?.throwIfAborted();
     iterations++;
     onEvent({ type: "iteration", n: iterations });
 
@@ -77,7 +84,7 @@ export async function runAgent(
       system: SYSTEM_PROMPT,
       tools: toolSchemas,
       messages,
-    });
+    }, { signal });
     // Forward text as it's generated, so the UI can show the answer while it's written.
     stream.on("text", (delta) => onEvent({ type: "text", delta }));
     const response = await stream.finalMessage();

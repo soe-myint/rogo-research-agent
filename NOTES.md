@@ -30,6 +30,9 @@
   Errors keep their stack trace and are also appended to `logs/errors.jsonl` for review; error messages shown to
   users include the request ID. In production, the JSON output would go to Datadog and errors to Sentry instead;
   `src/log.ts` is the one place to wire them in.
+- **Cancellation and a time limit.** If the user disconnects, the in-flight model call is aborted and no further
+  calls start. Each request also stops after 2 minutes (`ROGO_TIMEOUT_MS`) with a clear message, instead of a
+  spinner that never ends.
 
 ## Decisions
 
@@ -46,9 +49,11 @@
   -      system: SYSTEM_PROMPT,
   +      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
   ```
-- No tests for the HTTP endpoint or UI rendering, and real latency is only measured by hand.
+- No tests for the HTTP endpoint or UI rendering, and real latency is only measured by hand. Each needs a medium
+  amount of change (splitting the server's app setup from `listen()`, a browser-like test environment, a benchmark
+  script against the live API), and I didn't have time for them. With more time, they're important to add.
 - No stop-reason checks, raw API errors shown to users, no input validation.
-- Bulky tool results; no cancellation or timeout.
+- Bulky tool results.
 - Company names must match exactly ("Acme", "GLBX" fail).
 
 ## Process

@@ -12,10 +12,12 @@ const toolUse = (id: string, name: string, input: Record<string, unknown>) =>
  */
 function fakeClient(turns: Anthropic.ContentBlock[][]) {
   const requests: Anthropic.MessageStreamParams[] = [];
+  const signals: (AbortSignal | undefined)[] = [];
   const client: ModelClient = {
     messages: {
-      stream(params) {
+      stream(params, options) {
         requests.push(structuredClone(params));
+        signals.push(options?.signal);
         const content = turns[Math.min(requests.length, turns.length) - 1];
         let onText = (_delta: string) => {};
         return {
@@ -32,7 +34,7 @@ function fakeClient(turns: Anthropic.ContentBlock[][]) {
       },
     },
   };
-  return { client, requests };
+  return { client, requests, signals };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -46,7 +48,7 @@ describe("runAgent", () => {
       [toolUse("a", "getFinancials", { company: "Acme Corp" }), toolUse("b", "getCompanyProfile", { company: "Initech" })],
       [text("Acme Corp is growing faster.")],
     ]);
-    const pending = runAgent("Compare them", () => {}, client);
+    const pending = runAgent("Compare them", () => {}, { client });
     await vi.advanceTimersByTimeAsync(800);
 
     const result = await pending;
@@ -57,10 +59,24 @@ describe("runAgent", () => {
     expect((results.content as Anthropic.ToolResultBlockParam[]).map((r) => r.tool_use_id)).toEqual(["a", "b"]);
   });
 
+  // When the user disconnects or the deadline passes, the in-flight call is aborted (via the
+  // signal) and no further model calls start.
+  it("stops making model calls once the request is aborted", async () => {
+    const { client, requests, signals } = fakeClient([[toolUse("a", "getFinancials", { company: "Acme Corp" })], [text("Done.")]]);
+    const controller = new AbortController();
+    const outcome = expect(runAgent("Compare", () => {}, { client, signal: controller.signal })).rejects.toThrow();
+
+    controller.abort(); // e.g. the user closes the tab while the tools run
+    await vi.advanceTimersByTimeAsync(800);
+    await outcome;
+    expect(requests).toHaveLength(1);
+    expect(signals[0]).toBe(controller.signal);
+  });
+
   // Bounds the worst case: a model that keeps calling tools can't run (and bill) forever.
   it("gives up after 12 model calls if the model never stops calling tools", async () => {
     const { client, requests } = fakeClient([[toolUse("a", "searchCompanies", { query: "Acme" })]]);
-    const pending = runAgent("Loop forever", () => {}, client);
+    const pending = runAgent("Loop forever", () => {}, { client });
     await vi.advanceTimersByTimeAsync(12 * 250);
 
     expect((await pending).answer).toMatch(/ran out of research steps/);
@@ -75,7 +91,7 @@ describe("runAgent performance guarantees", () => {
   // Guards the editor-pass removal (27.0s → 16.1s).
   it("makes one model call per turn, with no extra polish call after the answer", async () => {
     const { client, requests } = fakeClient([[text("Acme Robotics.")]]);
-    const result = await runAgent("Who is growing fastest?", () => {}, client);
+    const result = await runAgent("Who is growing fastest?", () => {}, { client });
 
     expect(result.answer).toBe("Acme Robotics.");
     expect(requests).toHaveLength(1);
@@ -88,7 +104,7 @@ describe("runAgent performance guarantees", () => {
       [text("Done.")],
     ]);
     let settled = false;
-    void runAgent("Compare them", () => {}, client).then(() => (settled = true));
+    void runAgent("Compare them", () => {}, { client }).then(() => (settled = true));
 
     // Each lookup takes 800ms; one after another they would need 1600ms.
     await vi.advanceTimersByTimeAsync(800);
@@ -98,7 +114,7 @@ describe("runAgent performance guarantees", () => {
   // Guards the effort change (README questions: 68.7s → 56.7s). Fails if ROGO_EFFORT is set.
   it("asks for medium thinking effort on every call", async () => {
     const { client, requests } = fakeClient([[toolUse("a", "searchCompanies", { query: "Acme" })], [text("Done.")]]);
-    const pending = runAgent("Find Acme", () => {}, client);
+    const pending = runAgent("Find Acme", () => {}, { client });
     await vi.advanceTimersByTimeAsync(250);
     await pending;
 
@@ -109,7 +125,7 @@ describe("runAgent performance guarantees", () => {
   it("streams the answer's text as it arrives", async () => {
     const { client } = fakeClient([[text("Acme Robotics.")]]);
     const events: AgentEvent[] = [];
-    await runAgent("Who is growing fastest?", (e) => events.push(e), client);
+    await runAgent("Who is growing fastest?", (e) => events.push(e), { client });
 
     expect(events).toEqual([
       { type: "iteration", n: 1 },

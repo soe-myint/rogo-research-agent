@@ -12,6 +12,8 @@ if (!process.env.ANTHROPIC_API_KEY) {
   process.exit(1);
 }
 
+const REQUEST_TIMEOUT_MS = Number(process.env.ROGO_TIMEOUT_MS ?? 120_000);
+
 const app = express();
 app.use(express.json());
 
@@ -28,6 +30,13 @@ app.post("/api/chat", (req, res) => {
     res.setHeader("Cache-Control", "no-cache");
     res.flushHeaders();
     const send = (event: ChatEvent) => res.write(`${JSON.stringify(event)}\n`);
+
+    // Stop the agent (and its model calls) if the user goes away or the request runs too long.
+    const disconnected = new AbortController();
+    res.on("close", () => {
+      if (!res.writableEnded) disconnected.abort();
+    });
+    const signal = AbortSignal.any([disconnected.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]);
 
     try {
       const result = await runAgent(message, (event) => {
@@ -46,13 +55,24 @@ app.post("/api/chat", (req, res) => {
             break;
         }
         send(event);
-      });
+      }, { signal });
 
       send({ type: "answer", answer: result.answer });
       log.info("chat_finished", { ms: Date.now() - startedAt, modelCalls: result.iterations, ...result.usage });
     } catch (err) {
-      log.error("chat_failed", { ms: Date.now() - startedAt, error: err });
-      send({ type: "error", message: `${String(err)} (reference ${requestId})` });
+      const ms = Date.now() - startedAt;
+      if (disconnected.signal.aborted) {
+        log.info("chat_cancelled", { ms });
+      } else if (signal.aborted) {
+        log.warn("chat_timed_out", { ms });
+        send({
+          type: "error",
+          message: `This took longer than ${REQUEST_TIMEOUT_MS / 1000}s, so I stopped. Try a narrower question. (reference ${requestId})`,
+        });
+      } else {
+        log.error("chat_failed", { ms, error: err });
+        send({ type: "error", message: `${String(err)} (reference ${requestId})` });
+      }
     }
     res.end();
   });
